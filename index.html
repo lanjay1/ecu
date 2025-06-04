@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<!--index.html
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ECU Tuning Interface</title>
+<script src="https://cdn.jsdelivr.net/npm/canvas-gauges/gauge.min.js"></script>
+<style>
+    body { margin: 0; font-family: sans-serif; background: #0f0f0f; color: white; }
+    nav {
+      background: #220033; display: flex; justify-content: space-around;
+      padding: 10px 0; position: fixed; width: 100%; top: 0; z-index: 999;
+    }
+    nav button {
+      background: #440066; border: none; color: white; padding: 10px 20px;
+      font-weight: bold; cursor: pointer; font-size: 1em;
+    }
+    section { display: none; padding-top: 60px; }
+    section.active { display: block; }
+    h2 { margin-top: 1em; text-align: center; }
+    .info-box { background: #240042; padding: 10px; margin: 10px; display: inline-block; min-width: 120px; border-radius: 8px; }
+    .info-value { font-size: 1.5em; color: #fff; }
+    .map-table input { width: 48px; background: #000; color: white; border: none; text-align: center; }
+    .map-table td, .map-table th { border: 1px solid #333; padding: 4px; background: #111; }
+    .setting { margin: 10px 20px; }
+    label { display: inline-block; width: 200px; }
+    input[type="number"], select { width: 100px; background: #222; color: white; border: 1px solid #444; padding: 5px; }
+    .heat-green  { background-color: #c8facc; }
+     .heat-yellow { background-color: #fff59d; }
+     .heat-red    { background-color: #f28b82; }
+      .selected-cell { outline: 2px dashed #2196f3; }
+      .map-selector {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+.map-btn {
+  padding: 10px 20px;
+  margin: 0 5px;
+  background-color: #222;
+  color: white;
+  border: 2px solid #555;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+.map-btn.active {
+  background-color: #00bfff;
+  border-color: #00bfff;
+}
+.diag-row {
+  font-size: 18px;
+  margin-bottom: 8px;
+  color: white;
+}
+nav {
+  display: flex;
+  overflow-x: auto;
+  white-space: nowrap;
+  background: #220022;
+}
+
+nav button {
+  flex: 0 0 auto;
+  margin: 4px;
+  padding: 8px 12px;
+  background-color: #330044;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+ @media (max-width: 600px) {
+      .setting label {
+        width: 100%;
+        display: block;
+        margin-bottom: 5px;
+      }
+      .setting input,
+      .setting select {
+        width: 100%;
+      }
+    }
+    .feature-indicator {
+      display: inline-block;
+      margin-left: 10px;
+      font-weight: bold;
+    }
+    .feature-indicator.active {
+      color: #00ff00;
+    }
+    .feature-indicator.inactive {
+      color: #ff0000;
+    }
+
+
+
+  </style>
+</head>
+<body>
+<nav>
+<button onclick="showTab('dash')">Dashboard</button>
+<button onclick="showTab('map')">Map Editor</button>
+<button onclick="showTab('settings'); requestSettings();">Settings</button>
+<button onclick="showTab('tpsCalib')">TPS Calibration</button>
+<button onclick="showTab('diagnostics'); requestDiagnostics();">Diagnostics</button>
+<button onclick="showTab('ota')">Firmware Update</button>
+</nav>
+<section class="active" id="dash">
+<h2>Dashboard</h2>
+<canvas height="240" id="speedo" width="240"></canvas>
+<div class="info-box">RPM<br/><div class="info-value" id="rpm">0</div></div>
+<div class="info-box">TPS<br/><div class="info-value" id="tps">0</div></div>
+<div class="info-box">Gear<br/><div class="info-value" id="gear">N</div></div>
+<div class="info-box">Advance<br/><div class="info-value" id="advance">0</div></div>
+<div class="info-box">CLT<br/><div class="info-value" id="clt">0</div></div>
+<div class="info-box">IAT<br/><div class="info-value" id="iat">0</div></div>
+<div class="info-box">Batt<br/><div class="info-value" id="batt">0</div></div>
+<div class="setting">
+      <button onclick="enterSimMode()">Simulasi Mode</button>
+    </div>
+</section>
+<section id="map">
+<h2>Fuel Map</h2>
+<table class="map-table" id="fuelMap"></table>
+<h2>Ignition Map</h2>
+<table class="map-table" id="ignMap"></table>
+<h2>AFR Target Map</h2>
+<table class="map-table" id="afrMap">
+<tr>
+<th>RPM</th>
+<th>TPS</th>
+<th>AFR</th>
+</tr>
+<tr>
+<td>1000</td>
+<td>10%</td>
+<td>14.7</td>
+</tr>
+<tr>
+<td>2000</td>
+<td>25%</td>
+<td>13.5</td>
+</tr>
+</table>
+<button onclick="loadMaps()">Load Maps</button>
+<button onclick="applyMaps()">Apply</button>
+<button onclick="saveMaps()">Save</button>
+<button onclick="exportMap()">Export Map</button>
+<input accept=".json" onchange="importMap(event)" type="file"/>
+<label for="mapFileInput" style="display: inline-block; margin: 10px 0;">
+<strong>Import Map:</strong> (format: .json)
+</label>
+<div>
+<strong>Green ≤</strong>
+<button onclick="adjustThreshold('fuelMap', 'green', -0.1)">−</button>
+<span id="fuelMap_green_val">13.0</span>
+<button onclick="adjustThreshold('fuelMap', 'green', 0.1)">+</button>
+</div>
+<div>
+<strong>Yellow ≤</strong>
+<button onclick="adjustThreshold('fuelMap', 'yellow', -0.1)">−</button>
+<span id="fuelMap_yellow_val">14.7</span>
+<button onclick="adjustThreshold('fuelMap', 'yellow', 0.1)">+</button>
+</div>
+    <div class="setting">
+      <button onclick="resetMaps()">Reset Map to Default</button>
+    
+    </div>
+</section>
+<section id="settings">
+<h2>ECU Settings</h2>
+<div class="setting">
+<div class="setting"><label>Engine Limit RPM</label><input id="engineLimit" type="number"/></div>
+<div class="setting"><label>Fan ON (°C)</label><input id="fanOn" type="number"/></div>
+<div class="setting"><label>Fan OFF (°C)</label><input id="fanOff" type="number"/></div>
+<div class="setting"><label>QS RPM Min</label><input id="qsRpm" type="number"/></div>
+<div class="setting"><label>Suhu Intake (C)</label><span id="iatTemp">C</span></div>
+<div class="setting"><label>Koreksi Intake (%)</label><input id="iatCorr" max="150" min="50" step="1" type="number"/>%</div>
+<div class="setting"><label>QS Cut Time (ms)</label><input id="qsCut" type="number"/></div>
+<div class="setting"><label>QS Sensitivity</label><input id="qsSens" type="number"/></div>
+<div class="setting"><label>Pit Limit RPM</label><input id="pitLimit" type="number"/></div>
+<div class="setting"><label>Launch RPM</label><input id="launchRpm" type="number"/></div>
+<div class="setting"><label>Launch Delay (ms)</label><input id="launchDelay" type="number"/></div>
+<div class="setting"><label>Blipper Duration (ms)</label><input id="blipperDur" type="number"/></div>
+<div class="setting"><label>Idle Loop Mode</label>
+<select id="idleMode">
+<option value="0">Mode A</option>
+<option value="1">Mode B</option>
+<option value="2">Mode C</option>
+<option value="3">Mode D</option>
+<option value="4">Mode E</option>
+</select>
+</div>
+    <div class="setting">
+      <label>Quick Shift</label><input id="qsEnable" type="checkbox"/>
+      <span id="qsStatus" class="feature-indicator inactive">OFF</span>
+    </div>
+    <div class="setting">
+      <label>Launch Control</label><input id="launchEnable" type="checkbox"/>
+      <span id="launchStatus" class="feature-indicator inactive">OFF</span>
+    </div>
+    <div class="setting">
+      <label>Backfire</label><input id="backfire" type="checkbox"/>
+      <span id="backfireStatus" class="feature-indicator inactive">OFF</span>
+    </div>
+    <div class="setting">
+      <label>Idle Loop</label><input id="idleLoop" type="checkbox"/>
+      <span id="idleLoopStatus" class="feature-indicator inactive">OFF</span>
+    </div>
+    <div class="setting">
+      <label>Auto Blipper</label><input id="blipperEnable" type="checkbox"/>
+      <span id="blipperStatus" class="feature-indicator inactive">OFF</span>
+    </div>
+    <div class="setting">
+      <label>Pit Limiter</label><input id="pitEnable" type="checkbox"/>
+      <span id="pitStatus" class="feature-indicator inactive">OFF</span>
+    </div>
+    <div class="setting">
+      <label>CT Backfire</label><input id="ctBackfire" type="checkbox"/>
+      <span id="ctBackfireStatus" class="feature-indicator inactive">OFF</span>
+    </div>
+<h3>Pilih MAP Profil</h3>
+<div class="map-selector">
+  <div class="map-btn" id="mapBtn0" onclick="selectMap(0)">MAP-1</div>
+  <div class="map-btn" id="mapBtn1" onclick="selectMap(1)">MAP-2</div>
+  <div class="map-btn" id="mapBtn2" onclick="selectMap(2)">MAP-3</div>
+  <button onclick="resetMap(1)">Reset MAP 2</button>
+</div>
+<button onclick="applySettings()">Apply</button>
+<button onclick="saveSettings()">Save</button>
+<div class="setting">
+  <button onclick="resetSettings()">Reset to Default</button>
+  <button onclick="exportSettings()">Export Settings</button>
+  <input type="file" accept=".json" onchange="importSettings(event)" />
+</div>
+<div id="notification"></div>
+
+</section>
+<section id="tpsCalib">
+<h2>Kalibrasi TPS</h2>
+<div class="setting"><label>Voltase TPS</label><span id="tpsVolt">0.00</span> V</div>
+<div class="setting"><label>Value TPS</label><span id="tpsValue">-</span></div>
+<div class="setting"><label>TPS Minimum</label><span id="tpsMin">-</span></div>
+<div class="setting"><label>TPS Maksimum</label><span id="tpsMax">-</span></div>
+<div class="setting">
+  <button onclick="saveTpsMin()">Simpan Minimum</button>
+  <button onclick="saveTpsMax()">Simpan Maksimum</button>
+</div>
+
+</section>
+<section id="diagnostics" class="">
+  <h2>Sensor Diagnostics</h2>
+  <div class="diag-row">RPM: <span id="diagRpm">-</span></div>
+  <div class="diag-row">TPS: <span id="diagTps">-</span> %</div>
+  <div class="diag-row">CLT: <span id="diagClt">-</span> °C</div>
+  <div class="diag-row">AFR: <span id="diagAfr">-</span></div>
+  <div class="diag-row">Battery: <span id="diagBat">-</span> V</div>
+</section>
+<section id="ota">
+  <h2>Update Firmware STM32</h2>
+  <input type="file" accept=".bin" onchange="uploadFirmware(event)" />
+</section>
+
+<script>
+    const socket = new WebSocket("ws://" + location.host + "/ws");
+
+    const speedGauge = new RadialGauge({
+      renderTo: 'speedo', width: 240, height: 240,
+      units: "km/h", minValue: 0, maxValue: 180, value: 0,
+      majorTicks: ["0","20","40","60","80","100","120","140","160","180"],
+      highlights: [{ from: 140, to: 180, color: 'rgba(200, 50, 50, .75)' }],
+      colorPlate: "#111", colorMajorTicks: "#fff", colorMinorTicks: "#aaa",
+      colorTitle: "#fff", colorUnits: "#fff", colorNumbers: "#fff",
+      colorNeedle: "#f00", valueBox: true
+    }).draw();
+
+    socket.onmessage = function (event) {
+  const data = JSON.parse(event.data);
+
+  if (data.type === 'realtime') {
+    rpm.textContent = data.rpm;
+    tps.textContent = data.tps;
+    gear.textContent = data.gear;
+    advance.textContent = data.advance;
+    clt.textContent = data.clt;
+    iat.textContent = data.iat;
+    batt.textContent = data.batt;
+    speedGauge.value = data.speed;
+  } 
+  if (data.cmd === "INIT_STATE") {
+    selectMapProfileUI(data.active_profile); // ← highlight tombol
+}
+
+  else if (data.type === "settings") {
+    engineLimit.value = data.engine_rpm_limit;
+    fanOn.value = data.coolant_fan_on;
+    fanOff.value = data.coolant_fan_off;
+    qsRpm.value = data.quickshift_rpm_min;
+    qsCut.value = data.quickshift_cut_time_ms;
+    qsSens.value = data.quickshift_sensitivity;
+    pitLimit.value = data.pit_limiter_rpm;
+    launchRpm.value = data.launch_control_rpm;
+    launchDelay.value = data.launch_delay_ms;
+    document.getElementById("iatCorr").value = data.iat_correction;
+    document.getElementById("iatTemp").textContent = data.intake_air_temp?.toFixed(1) || "-";
+    blipperDur.value = data.blipper_duration_ms;
+    idleLoop.checked = data.idle_loop_enabled;
+    idleMode.value = data.idle_loop_mode;
+    ctBackfire.checked = data.close_throttle_backfire;
+    backfire.checked = data.backfire_enabled;
+  } else if (data.type === "diag") {
+    document.getElementById("diagRpm").textContent = data.rpm;
+    document.getElementById("diagTps").textContent = data.tps;
+    document.getElementById("diagClt").textContent = data.clt;
+    document.getElementById("diagAfr").textContent = data.afr;
+    document.getElementById("diagBat").textContent = data.batt;
+  }
+};
+    // Save Map
+function exportMap() {
+  const map = {
+    fuel: getTableData("fuelMap"),
+    ignition: getTableData("ignMap"),
+    afr: getTableData("afrMap")
+  };
+  const blob = new Blob([JSON.stringify(map, null, 2)], {type: "application/json"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "ecu_map.json";
+  link.click();
+}
+
+// Load Map
+function importMap(event) {
+  const file = event.target.files[0];
+  if (!file || !file.name.endsWith(".json")) {
+    alert("File harus format .json hasil export map.");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const map = JSON.parse(e.target.result);
+      setTableData("fuelMap", map.fuel);
+      setTableData("ignMap", map.ignition);
+      setTableData("afrMap", map.afr);
+      alert("Map berhasil dimuat.");
+    } catch (err) {
+      alert("Gagal parsing file. Pastikan format benar.");
+    }
+  };
+  reader.readAsText(file);
+}
+
+5
+
+    function showTab(id) {
+  document.querySelectorAll("section").forEach(section => {
+    section.style.display = "none";
+  });
+  const activeTab = document.getElementById(id);
+  if (activeTab) activeTab.style.display = "block";
+}
+
+
+    function requestSettings() {
+      socket.send(JSON.stringify({ cmd: "GET_SETTINGS" }));
+    }
+
+    const tpsPts = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+    const rpmPts = Array.from({length: 24}, (_, i) => 800 + i * 500);
+
+    function buildMapTable(id, def) {
+      let html = '<tr><th>TPS\\RPM</th>' + rpmPts.map(r => `<th>${r}</th>`).join('') + '</tr>';
+      for (const t of tpsPts) {
+        html += `<tr><th>${t}</th>`;
+        for (const r of rpmPts) {
+          html += `<td><input type='number' value='${def}'></td>`;
+        }
+        html += '</tr>';
+      }
+      document.getElementById(id).innerHTML = html;
+    }
+
+    buildMapTable("fuelMap", 100);
+    buildMapTable("ignMap", 15);
+    buildMapTable("afrMap", 20);  // AFR Target Map
+
+
+    function applyMaps() { alert("Apply maps (send via WebSocket)"); }
+    
+function getMapData(mapId) {
+    const map = [];
+    const rows = document.querySelectorAll(`#${mapId} tr`);
+    rows.forEach((row, i) => {
+        if (i === 0) return; // Skip header
+        const cells = row.querySelectorAll("td");
+        const rowData = [];
+        cells.forEach(cell => {
+            rowData.push(parseFloat(cell.innerText));
+        });
+        map.push(rowData);
+    });
+    return map;
+}
+
+function saveMaps() {
+    const fuelMap = getMapData("fuelMap");
+    const ignMap = getMapData("ignMap");
+    const afrMap = getMapData("afrMap");
+
+    const maps = {
+        fuel: fuelMap,
+        ignition: ignMap,
+        afr: afrMap
+    };
+
+    console.log("Saving maps:", maps);
+
+    // Kirim ke backend atau ESP32, contoh pakai fetch
+    /*
+    fetch("/api/save_maps", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(maps)
+    }).then(res => {
+        if (res.ok) alert("Maps saved!");
+        else alert("Failed to save maps");
+    });
+    */
+    alert("Maps collected. Check console or implement backend sync.");
+}
+
+    function applySettings() {
+      const s = {
+        engine_rpm_limit: +engineLimit.value,
+        coolant_fan_on: +fanOn.value,
+        coolant_fan_off: +fanOff.value,
+        quickshift_rpm_min: +qsRpm.value,
+        quickshift_cut_time_ms: +qsCut.value,
+        quickshift_sensitivity: +qsSens.value,
+        iat_correction: +document.getElementById("iatCorr").value,
+
+        pit_limiter_rpm: +pitLimit.value,
+        launch_control_rpm: +launchRpm.value,
+        launch_delay_ms: +launchDelay.value,
+        blipper_duration_ms: +blipperDur.value,
+        idle_loop_enabled: idleLoop.checked,
+        idle_loop_mode: +idleMode.value,
+        close_throttle_backfire: ctBackfire.checked,
+        backfire_enabled: backfire.checked,
+    launch_control_enabled: launchEnable.checked,
+    quickshift_enabled: qsEnable.checked,
+    auto_blipper_enabled: blipperEnable.checked,
+    pit_limiter_enabled: pitEnable.checked
+      };
+      socket.send(JSON.stringify({ cmd: "SET_SETTINGS", data: s }));
+    }
+
+    function saveSettings() {
+      socket.send(JSON.stringify({ cmd: "SAVE_SETTINGS" }));
+    }// === Drag-select + block set ===
+let isDragging = false;
+let selectedCells = [];
+let dragStartValue = null;
+
+
+function loadMaps() {
+    // Contoh data dummy, bisa diganti dari fetch("/api/load_maps")
+    const maps = {
+        fuel: [
+            [12.5, 13.0, 13.5],
+            [13.2, 13.7, 14.0],
+            [13.8, 14.1, 14.5]
+        ],
+        ignition: [
+            [10, 15, 20],
+            [12, 18, 22],
+            [14, 20, 24]
+        ],
+        afr: [
+            [14.7, 14.2, 13.8],
+            [13.5, 13.2, 13.0],
+            [12.8, 12.5, 12.2]
+        ]
+    };
+
+    function fillMap(mapId, data) {
+        const table = document.getElementById(mapId);
+        table.innerHTML = "";
+        data.forEach(row => {
+            const tr = document.createElement("tr");
+            row.forEach(val => {
+                const td = document.createElement("td");
+                td.contentEditable = true;
+                td.innerText = val;
+                tr.appendChild(td);
+            });
+            table.appendChild(tr);
+        });
+    }
+
+    fillMap("fuelMap", maps.fuel);
+    fillMap("ignMap", maps.ignition);
+    fillMap("afrMap", maps.afr);
+
+    alert("Maps loaded.");
+}
+function requestDiagnostics() {
+  socket.send(JSON.stringify({ cmd: "GET_DIAGNOSTIC" }));
+}
+function getTableData(mapId) {
+  const data = [];
+  const rows = document.querySelectorAll(`#${mapId} tr`);
+  rows.forEach((row, i) => {
+    const inputs = row.querySelectorAll("input");
+    if (inputs.length > 0) {
+      const rowData = [];
+      inputs.forEach(input => {
+        rowData.push(parseFloat(input.value));
+      });
+      data.push(rowData);
+    }
+  });
+  return data;
+}
+function selectMap(index) {
+  socket.send(JSON.stringify({ cmd: "LOAD_PROFILE", data: index }));
+
+  for (let i = 0; i < 3; i++) {
+    const btn = document.getElementById("mapBtn" + i);
+    if (btn) {
+      btn.classList.remove("active");
+    }
+  }
+
+  const selectedBtn = document.getElementById("mapBtn" + index);
+  if (selectedBtn) {
+    selectedBtn.classList.add("active");
+  }
+}
+function updateFeatureIndicator(checkboxId, indicatorId) {
+  const checkbox = document.getElementById(checkboxId);
+  const indicator = document.getElementById(indicatorId);
+  if (!checkbox || !indicator) return;
+
+  checkbox.addEventListener('change', () => {
+    if (checkbox.checked) {
+      indicator.textContent = "ON";
+      indicator.classList.remove("inactive");
+      indicator.classList.add("active");
+    } else {
+      indicator.textContent = "OFF";
+      indicator.classList.remove("active");
+      indicator.classList.add("inactive");
+    }
+  });
+
+  // Inisialisasi saat halaman load
+  if (checkbox.checked) {
+    indicator.textContent = "ON";
+    indicator.classList.add("active");
+  } else {
+    indicator.textContent = "OFF";
+    indicator.classList.add("inactive");
+  }
+}
+
+// Daftar fitur yang dipantau
+const features = [
+  { checkbox: "qsEnable", indicator: "qsStatus" },
+  { checkbox: "launchEnable", indicator: "launchStatus" },
+  { checkbox: "backfire", indicator: "backfireStatus" },
+  { checkbox: "idleLoop", indicator: "idleLoopStatus" },
+  { checkbox: "blipperEnable", indicator: "blipperStatus" },
+  { checkbox: "pitEnable", indicator: "pitStatus" },
+  { checkbox: "ctBackfire", indicator: "ctBackfireStatus" },
+];
+
+// Jalankan fungsi update saat halaman siap
+window.addEventListener("DOMContentLoaded", () => {
+  features.forEach(f => updateFeatureIndicator(f.checkbox, f.indicator));
+});
+
+function enableMouseDrag(mapId) {
+  const inputs = document.querySelectorAll(`#${mapId} input[type='number']`);
+  let isDragging = false;
+  let selectedCells = [];
+  let dragStartValue = null;
+
+  inputs.forEach(input => {
+    input.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      selectedCells = [input];
+      dragStartValue = input.value;
+      input.classList.add('selected-cell');
+    });
+
+    input.addEventListener('mouseover', (e) => {
+      if (isDragging && !selectedCells.includes(input)) {
+        selectedCells.push(input);
+        input.classList.add('selected-cell');
+      }
+    });
+
+    input.addEventListener('mouseup', (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      const newVal = prompt("Nilai baru untuk area terpilih:", dragStartValue);
+      if (newVal !== null) {
+        selectedCells.forEach(cell => {
+          cell.value = newVal;
+          cell.classList.remove('selected-cell');
+        });
+      } else {
+        selectedCells.forEach(cell => cell.classList.remove('selected-cell'));
+      }
+      selectedCells = [];
+    });
+  });
+
+  document.addEventListener("mouseup", () => {
+    isDragging = false;
+  });
+}
+
+// Aktifkan drag edit setelah build
+enableMouseDrag("fuelMap");
+enableMouseDrag("ignMap");
+enableMouseDrag("afrMap");
+
+function exportSettings() {
+  const settings = {
+    engine_rpm_limit: +engineLimit.value,
+    coolant_fan_on: +fanOn.value,
+    coolant_fan_off: +fanOff.value,
+    quickshift_rpm_min: +qsRpm.value,
+    quickshift_cut_time_ms: +qsCut.value,
+    quickshift_sensitivity: +qsSens.value,
+    iat_correction: +iatCorr.value,
+    pit_limiter_rpm: +pitLimit.value,
+    launch_control_rpm: +launchRpm.value,
+    launch_delay_ms: +launchDelay.value,
+    blipper_duration_ms: +blipperDur.value,
+    idle_loop_enabled: idleLoop.checked,
+    idle_loop_mode: +idleMode.value,
+    close_throttle_backfire: ctBackfire.checked,
+    backfire_enabled: backfire.checked,
+    launch_control_enabled: launchEnable.checked,
+    quickshift_enabled: qsEnable.checked,
+    auto_blipper_enabled: blipperEnable.checked,
+    pit_limiter_enabled: pitEnable.checked
+  };
+  const blob = new Blob([JSON.stringify(settings, null, 2)], {type: "application/json"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "ecu_settings.json";
+  link.click();
+}
+
+function importSettings(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const s = JSON.parse(e.target.result);
+      engineLimit.value = s.engine_rpm_limit || 13000;
+      fanOn.value = s.coolant_fan_on || 95;
+      fanOff.value = s.coolant_fan_off || 90;
+      qsRpm.value = s.quickshift_rpm_min || 5000;
+      qsCut.value = s.quickshift_cut_time_ms || 50;
+      qsSens.value = s.quickshift_sensitivity || 10;
+      iatCorr.value = s.iat_correction || 100;
+      pitLimit.value = s.pit_limiter_rpm || 6000;
+      launchRpm.value = s.launch_control_rpm || 7000;
+      launchDelay.value = s.launch_delay_ms || 100;
+      blipperDur.value = s.blipper_duration_ms || 50;
+      idleLoop.checked = !!s.idle_loop_enabled;
+      idleMode.value = s.idle_loop_mode || 0;
+      ctBackfire.checked = !!s.close_throttle_backfire;
+      backfire.checked = !!s.backfire_enabled;
+      launchEnable.checked = !!s.launch_control_enabled;
+      qsEnable.checked = !!s.quickshift_enabled;
+      blipperEnable.checked = !!s.auto_blipper_enabled;
+      pitEnable.checked = !!s.pit_limiter_enabled;
+      alert("Settings berhasil diimpor.");
+    } catch (err) {
+      alert("Gagal membaca file settings. Pastikan format benar.");
+    }
+  };
+  reader.readAsText(file);
+}
+
+function resetSettings() {
+  engineLimit.value = 13000;
+  fanOn.value = 95;
+  fanOff.value = 90;
+  qsRpm.value = 5000;
+  qsCut.value = 50;
+  qsSens.value = 10;
+  iatCorr.value = 100;
+  pitLimit.value = 6000;
+  launchRpm.value = 7000;
+  launchDelay.value = 100;
+  blipperDur.value = 50;
+  idleLoop.checked = false;
+  idleMode.value = 0;
+  ctBackfire.checked = false;
+  backfire.checked = false;
+  launchEnable.checked = false;
+  qsEnable.checked = false;
+  blipperEnable.checked = false;
+  pitEnable.checked = false;
+  alert("Settings telah dikembalikan ke default.");
+}
+function showNotification(msg) {
+      const box = document.getElementById('notification');
+      box.textContent = msg;
+      box.style.display = 'block';
+      setTimeout(() => box.style.display = 'none', 3000);
+    }
+    function uploadFirmware(event) {
+  const file = event.target.files[0];
+  if (!file || !file.name.endsWith(".bin")) {
+    alert("Harus file .bin hasil compile STM32");
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const arrayBuffer = reader.result;
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    socket.send(JSON.stringify({ cmd: "UPLOAD_FIRMWARE", data: base64 }));
+    alert("Firmware dikirim ke ESP32...");
+  };
+  reader.readAsArrayBuffer(file);
+}
+function resetMap(profile) {
+  socket.send(JSON.stringify({ cmd: "RESET_PROFILE", arg: profile }));
+}
+
+</script>
+</body>
+</html>
